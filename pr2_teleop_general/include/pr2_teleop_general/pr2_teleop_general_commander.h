@@ -40,6 +40,7 @@
 
 #include <sensor_msgs/JointState.h>
 #include <pr2_msgs/SetPeriodicCmd.h>
+#include <std_msgs/Bool.h>
 #include <geometry_msgs/Pose.h>
 #include <urdf/model.h>
 #include <actionlib/client/simple_action_client.h>
@@ -123,6 +124,10 @@ public:
 
   void switchControllers(const std::vector<std::string>& start_controllers, const std::vector<std::string>& stop_controllers);
 
+  void haltMotors();
+
+  void resetMotors();
+
   void sendWristVelCommands(double right_wrist_vel, double left_wrist_vel, double hz);
 
   bool getJointPosition(const std::string& name, double& pos) const;
@@ -158,6 +163,10 @@ public:
     walk_along_ok_ = false;
   }
 
+  bool isMotorsHalted() {
+    return is_motors_halted;
+  }
+
 private:
 
   geometry_msgs::Pose getPositionFromJointsPose(ros::ServiceClient& service_client,  						
@@ -169,6 +178,8 @@ private:
   void jointStateCallback(const sensor_msgs::JointStateConstPtr &jointState);
 
   void powerBoardCallback(const pr2_msgs::PowerBoardStateConstPtr &powerBoardState);
+  
+  void motorsCallBack(const std_msgs::Bool::ConstPtr &motorsHalted);
 
   void composeWristRotGoal(const std::string pref, pr2_controllers_msgs::JointTrajectoryGoal& goal, 
                            std::vector<double>& des_joints, double des_vel, double hz) const;
@@ -186,7 +197,9 @@ private:
   bool control_rarm_;
   bool control_larm_;
   bool control_prosilica_;
-  
+
+  bool is_motors_halted;
+
   double laser_slow_period_;
   double laser_slow_amplitude_;
   double laser_slow_offset_;
@@ -216,6 +229,8 @@ private:
 
   ros::ServiceClient tilt_laser_service_;
   ros::ServiceClient switch_controllers_service_;
+  ros::ServiceClient motor_halt_service_;
+  ros::ServiceClient motor_reset_service_;
   ros::ServiceClient right_arm_kinematics_solver_client_;
   ros::ServiceClient right_arm_kinematics_forward_client_;
   ros::ServiceClient right_arm_kinematics_inverse_client_;
@@ -230,6 +245,7 @@ private:
   ros::Publisher left_arm_traj_pub_;
   ros::Subscriber joint_state_sub_;
   ros::Subscriber power_board_sub_;
+  ros::Subscriber motors_sub_;
 
   ros::Time last_right_wrist_goal_stamp_;  
   ros::Time last_left_wrist_goal_stamp_;
