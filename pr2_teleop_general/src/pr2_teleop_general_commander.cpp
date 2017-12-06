@@ -35,6 +35,7 @@
 #include <tf/LinearMath/Quaternion.h>
 #include <tf/LinearMath/Matrix3x3.h>
 
+#include <std_srvs/Empty.h>
 #include <pr2_mechanism_msgs/SwitchController.h>
 #include <geometry_msgs/Twist.h>
 #include <trajectory_msgs/JointTrajectory.h>
@@ -51,7 +52,6 @@ static const std::string LEFT_HAND_LINK_TO_TRACK = "l_gripper_palm_link";
 static const std::string RIGHT_HAND_LINK_TO_TRACK = "r_gripper_palm_link";
 
 static const double MAX_HEAD_TRACK_SPEED = 2.0;
-
 static const double GRIPPER_CLOSE_POSITION = 0.000;
 static const double GRIPPER_CLOSE_MAX_EFFORT = 10000.0;
 
@@ -100,8 +100,11 @@ GeneralCommander::GeneralCommander(bool control_body,
 
   //universal
   switch_controllers_service_ = n_.serviceClient<pr2_mechanism_msgs::SwitchController>("pr2_controller_manager/switch_controller");
+  motor_halt_service_ = n_.serviceClient<std_srvs::Empty>("pr2_ethercat/halt_motors");
+  motor_reset_service_ = n_.serviceClient<std_srvs::Empty>("pr2_ethercat/reset_motors");
   joint_state_sub_ = n_.subscribe("joint_states", 1, &GeneralCommander::jointStateCallback, this);
   power_board_sub_ = n_.subscribe<pr2_msgs::PowerBoardState>("power_board/state", 1, &GeneralCommander::powerBoardCallback, this);
+  motors_sub_ = n_.subscribe<std_msgs::Bool>("pr2_ethercat/motors_halted", 1, &GeneralCommander::motorsCallBack, this);
 
   if(control_head_) {
     tilt_laser_service_ = n_.serviceClient<pr2_msgs::SetPeriodicCmd>("laser_tilt_controller/set_periodic_cmd");
@@ -262,6 +265,8 @@ GeneralCommander::GeneralCommander(bool control_body,
 
   last_torso_vel_ = 0.0;
   walk_along_ok_ = false;
+
+  is_motors_halted = true;
 }
 
 GeneralCommander::~GeneralCommander() {
@@ -603,6 +608,18 @@ void GeneralCommander::sendBaseCommand(double vx, double vy, double vw) {
   cmd.linear.y = vy;
   cmd.angular.z = vw;
   base_pub_.publish(cmd);
+}
+
+void GeneralCommander::haltMotors() {
+  std_srvs::Empty::Request req;
+  std_srvs::Empty::Response res;
+  motor_halt_service_.call(req,res);
+}
+
+void GeneralCommander::resetMotors() {
+  std_srvs::Empty::Request req;
+  std_srvs::Empty::Response res;
+  motor_reset_service_.call(req,res);
 }
 
 void GeneralCommander::switchControllers(const std::vector<std::string>& start_controllers, const std::vector<std::string>& stop_controllers) {
@@ -1528,6 +1545,11 @@ void GeneralCommander::powerBoardCallback(const pr2_msgs::PowerBoardStateConstPt
     }
   }
 }
+
+void GeneralCommander::motorsCallBack(const std_msgs::Bool::ConstPtr &motorsHalted)
+{
+  is_motors_halted = motorsHalted->data;
+} 
 
 void GeneralCommander::requestProsilicaImage(std::string ns) {
   if(!control_prosilica_) return;

@@ -64,6 +64,8 @@ static const unsigned int OPEN_GRIPPER_BUTTON = 15;
 static const unsigned int CLOSE_GRIPPER_BUTTON = 13;
 static const unsigned int ARM_MODE_TOGGLE_BUTTON = 4;
 static const unsigned int ARM_POSE_BUTTON = 6;
+static const unsigned int MOTOR_HALT_BUTTON = 0;
+static const unsigned int MOTOR_RESET_BUTTON = 3;
 
 static const unsigned int LEFT_AXIS_NUMBER = 1;
 static const unsigned int RIGHT_AXIS_NUMBER = 1;
@@ -243,6 +245,19 @@ public:
       layout = LAYOUT_HEAD;
     } else {
       layout = LAYOUT_NONE;
+    }
+
+    if(layout == LAYOUT_BODY) {
+      if(buttonOkAndOn(MOTOR_HALT_BUTTON, joy_msg)) {
+	gc->haltMotors();
+      }
+      else if(buttonOkAndOn(MOTOR_RESET_BUTTON, joy_msg)) {
+	if (gc->isMotorsHalted())
+	  {
+	    gc->resetMotors();
+	    ros::Duration(0.5).sleep();
+	  }
+      }
     }
 
     bool setting_walk_along_this_cycle_ = false;
