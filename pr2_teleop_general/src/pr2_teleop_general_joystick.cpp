@@ -142,6 +142,19 @@ public:
 
     n_local.param("wrist_velocity",wrist_velocity_, 4.5);
 
+    double joy_msg_timeout;
+    n_local.param("joy_msg_timeout",joy_msg_timeout, 0.5);
+    if (joy_msg_timeout <= 0)
+    {
+        joy_message_timeout_ = ros::Duration().fromSec(9999999);//DURATION_MAX;
+        ROS_INFO("joy_msg_timeout <= 0 -> no timeout");
+    }
+    else
+    {
+        joy_message_timeout_.fromSec(joy_msg_timeout);
+        ROS_INFO("joy_msg_timeout: %.3f", joy_message_timeout_.toSec());
+    }  
+    
     n_local.param("walk_along_x_speed_scale", walk_along_x_speed_scale_, 9.0);
     n_local.param("walk_along_y_speed_scale", walk_along_y_speed_scale_, 9.0);
     n_local.param("walk_along_w_speed_scale", walk_along_w_speed_scale_, 9.0);
@@ -229,8 +242,9 @@ public:
     if(first_callback_) {
       last_joy_ = joy_msg;
       first_callback_ = false;
+      last_received_joy_message_time_ = ros::Time();
     }
-
+    
     JoystickLayoutMode layout;
     
     if(buttonOkAndOn(BODY_LAYOUT_BUTTON, joy_msg)) {
@@ -737,6 +751,8 @@ public:
 
     joy_deadman_ = ros::Time::now();
     last_joy_ = joy_msg;
+    last_received_joy_message_time_ = ros::Time::now();
+          
   }
 
   bool convertCurrentVelToDesiredTorsoPos(double hz) {
@@ -876,6 +892,10 @@ public:
 
   ros::Time last_walk_along_time_;
 
+  ros::Duration joy_message_timeout_;
+  ros::Time last_received_joy_message_time_;
+    
+    
 };
 
 static const double FastHz = 100;
@@ -902,7 +922,7 @@ int main(int argc, char **argv)
 
   Pr2TeleopGeneralJoystick generaljoy;
   generaljoy.init();
-  
+
   ros::Rate pub_rate(FastHz);
     
   unsigned int counter_limit = (unsigned int)(FastHz/SlowHz);
@@ -916,11 +936,25 @@ int main(int argc, char **argv)
     //ROS_INFO_STREAM("Time since last " << (ros::Time::now()-beforeCall).toSec());
     beforeCall = ros::Time::now();
 
-    if(!generaljoy.gc->isWalkAlongOk() && !generaljoy.set_walk_along_mode_ && !generaljoy.walk_along_init_waiting_) {
+   if(!generaljoy.gc->isWalkAlongOk() && !generaljoy.set_walk_along_mode_ && !generaljoy.walk_along_init_waiting_) {
       if(generaljoy.convertCurrentVelToDesiredHeadPos(FastHz)) {
         generaljoy.gc->sendHeadCommand(generaljoy.des_pan_pos_, generaljoy.des_tilt_pos_);
       } 
       generaljoy.gc->sendHeadTrackCommand();
+      // time out to prevent robot from running into things
+      // ROS_INFO("ros::Time::now() %f", ros::Time::now().toSec());
+      // ROS_INFO("last_received_joy_message_time_ %f", generaljoy.last_received_joy_message_time_.toSec());
+      // ROS_INFO("joy_message_timeout %f", generaljoy.joy_message_timeout_.toSec());
+      if(ros::Time::now() - generaljoy.last_received_joy_message_time_ > generaljoy.joy_message_timeout_)
+      {
+          generaljoy.des_torso_vel_ = 0.0;
+          generaljoy.des_vx_ = 0.0;
+          generaljoy.des_vy_ = 0.0;
+          generaljoy.des_vw_ = 0.0;
+          // ROS_INFO("Joy message timed out! Lost connection with joystick. Setting base velocity commands to zero!");
+      }
+
+      // ROS_INFO("des_vx, des_vy, dex_vw: %f %f %f",generaljoy.des_vx_, generaljoy.des_vy_, generaljoy.des_vw_);
       generaljoy.gc->sendBaseCommand(generaljoy.des_vx_, generaljoy.des_vy_, generaljoy.des_vw_);
     }
       
